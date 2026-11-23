@@ -90,6 +90,36 @@ export const getBestSellers = async () => {
   return (list || []).map(toCardProduct);
 };
 
+// GET shop/products?category=<slug>&brand=<id,id>&min_price=&max_price=&page=&per_page=
+// -> { status, data: [product], filters: { price: { min, max }, ... }, meta: { total, per_page, current_page, last_page } }
+export const getShopProducts = async ({ category, brands = [], minPrice, maxPrice, page = 1, perPage, signal } = {}) => {
+  const params = new URLSearchParams();
+  if (category) params.set("category", category);
+  if (brands.length) params.set("brand", brands.join(","));
+  if (minPrice != null) params.set("min_price", minPrice);
+  if (maxPrice != null) params.set("max_price", maxPrice);
+  if (perPage) params.set("per_page", perPage);
+  params.set("page", page);
+
+  const response = await fetch(`${BASE_URL}shop/products?${params}`, {
+    headers: { Accept: "application/json" },
+    signal,
+  });
+  if (!response.ok) {
+    throw new Error(`HTTP Error: ${response.status} ${response.statusText}`);
+  }
+  const res = await response.json();
+  if (!(res.status ?? res.success)) {
+    throw new Error("Shop products fetch unsuccessful");
+  }
+  const price = res.filters?.price;
+  return {
+    products: (res.data || []).map(toCardProduct),
+    priceBounds: price ? [Math.floor(Number(price.min) || 0), Math.ceil(Number(price.max) || 0)] : null,
+    meta: res.meta || {},
+  };
+};
+
 // Specifications arrive as a list of { name | title | key | label, value | description | text } rows
 // (or a { name: value } map); anything without both a name and a value is dropped.
 const toSpecifications = (specs) => {

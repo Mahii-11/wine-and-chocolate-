@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { FiChevronUp, FiXCircle } from "react-icons/fi";
 import PriceRange from "./PriceRange";
-import { shopBrands } from "./shopBrandsData";
 
 const labelClass = "font-serif text-[14px] font-bold uppercase tracking-[0.12em] text-[#222]";
 
@@ -38,7 +37,7 @@ function BrandThumb({ brand }) {
   );
 }
 
-function FilterSidebar({ priceBounds, priceRange, onPriceChange, selectedBrands, onToggleBrand, onClear }) {
+function FilterSidebar({ brands, priceBounds, priceRange, onPriceChange, selectedBrands, onToggleBrand, onClear }) {
   return (
     <aside className="w-full lg:w-[255px] lg:shrink-0">
       <div className="flex items-center justify-between border-b border-gray-200 pl-3 pr-2">
@@ -53,18 +52,20 @@ function FilterSidebar({ priceBounds, priceRange, onPriceChange, selectedBrands,
         </button>
       </div>
 
-      <div className="mt-5">
-        <Collapsible title="Price">
-          <div className="px-2 pb-6 pt-9">
-            <PriceRange bounds={priceBounds} value={priceRange} onChange={onPriceChange} />
-          </div>
-        </Collapsible>
-      </div>
+      {priceBounds && priceBounds[1] > priceBounds[0] && (
+        <div className="mt-5">
+          <Collapsible title="Price">
+            <div className="px-2 pb-6 pt-9">
+              <PriceRange bounds={priceBounds} value={priceRange} onChange={onPriceChange} />
+            </div>
+          </Collapsible>
+        </div>
+      )}
 
       <div className="mt-7">
         <Collapsible title="Brands">
           <ul className="shop-scroll max-h-[390px] overflow-y-auto">
-            {shopBrands.map((brand) => {
+            {brands.map((brand) => {
               const checked = selectedBrands.includes(brand.id);
               return (
                 <li key={brand.id} className="border-b border-gray-200">
