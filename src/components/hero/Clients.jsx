@@ -1,9 +1,25 @@
-import { clients } from "./clientsData";
+import { useEffect, useState } from "react";
+import { getClients } from "../../services/api";
 import Section from "../ui/Section";
 import SectionHeader from "../ui/SectionHeader";
 import Marquee from "../ui/Marquee";
 
 function Clients() {
+  const [clients, setClients] = useState([]);
+
+  useEffect(() => {
+    let active = true;
+    getClients()
+      .then((list) => active && setClients(list))
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  // Nothing to show (loading, error or empty list): hide the whole section
+  if (clients.length === 0) return null;
+
   return (
     <Section className="bg-white">
       <SectionHeader
@@ -21,7 +37,7 @@ function Clients() {
         render={(client) => (
           <img
             src={client.logo}
-            alt={client.name}
+            alt="Client logo"
             loading="lazy"
             draggable={false}
             className="h-10 w-auto max-w-[140px] object-contain grayscale transition duration-300 hover:grayscale-0 sm:h-12 sm:max-w-[170px] lg:h-14 lg:max-w-[200px]"

@@ -169,7 +169,17 @@ export const getGiftCollections = () => getCollection("gift-collections-data");
 // GET special-offerings-data
 export const getSpecialOfferings = () => getCollection("special-offerings-data");
 
-// GET offer-banner -> { status, data: { offer_banner: "<image url>" } }
+// GET our-client-data -> { status, data: [ { id, image } ] }
+export const getClients = async () => {
+  const res = await fetchData("our-client-data");
+  if (!(res.status ?? res.success)) {
+    throw new Error("Clients fetch unsuccessful");
+  }
+  const list = Array.isArray(res?.data) ? res.data : res?.data?.data;
+  return (list || []).filter((c) => c.image).map((c) => ({ id: c.id, logo: c.image }));
+};
+
+// GET offer-banner ->{ status, data: { offer_banner: "<image url>" } }
 export const getOfferBanner = async () => {
   const res = await fetchData("offer-banner");
   if (!(res.status ?? res.success)) {
