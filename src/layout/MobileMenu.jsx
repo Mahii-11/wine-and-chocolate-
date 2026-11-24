@@ -3,7 +3,8 @@ import { Link, NavLink, useLocation } from "react-router";
 import { AnimatePresence, motion } from "motion/react";
 import { FiX, FiChevronRight, FiUser } from "react-icons/fi";
 import { FaPhoneAlt } from "react-icons/fa";
-import { categories, mainLinks, utilityLinks } from "./navData";
+import { categories, utilityLinks } from "./navData";
+import useMainMenu from "./useMainMenu";
 import useSocialLinks from "./useSocialLinks";
 import useSiteSettings, { toTelHref } from "./useSiteSettings";
 
@@ -14,6 +15,7 @@ const linkClass = ({ isActive }) =>
 
 function MobileMenu({ open, onClose }) {
   const { pathname } = useLocation();
+  const mainItems = useMainMenu();
   const { links, loading } = useSocialLinks();
   const { settings, loading: settingsLoading } = useSiteSettings();
 
@@ -63,12 +65,12 @@ function MobileMenu({ open, onClose }) {
 
             <div className="no-scrollbar flex-1 overflow-y-auto px-5 pb-8">
               <ul>
-                {mainLinks.map(({ to, label }) => (
-                  <li key={to}>
-                    <NavLink to={to} className={linkClass}>
+                {mainItems.map(({ key, to, label }) => (
+                  <li key={key}>
+                    <Link to={to} className={linkClass({ isActive: false })}>
                       {label}
                       <FiChevronRight size={18} className="text-white/50" />
-                    </NavLink>
+                    </Link>
                   </li>
                 ))}
               </ul>

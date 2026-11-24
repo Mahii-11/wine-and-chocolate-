@@ -37,7 +37,131 @@ function BrandThumb({ brand }) {
   );
 }
 
-function FilterSidebar({ brands, priceBounds, priceRange, onPriceChange, selectedBrands, onToggleBrand, onClear }) {
+function CategoryButton({ active, depth, count, onClick, expandable, open, onToggle, children }) {
+  return (
+    <div
+      style={{ paddingLeft: 12 + depth * 16 }}
+      className="flex w-full items-center border-b border-gray-200 pr-2"
+    >
+      <button
+        type="button"
+        onClick={onClick}
+        className={`flex flex-1 items-center justify-start gap-2 py-[9px] text-left font-serif text-[15px] leading-5 transition hover:text-brand-gold ${
+          active ? "font-bold text-black" : "text-[#333]"
+        }`}
+      >
+        <span>
+          {children}
+          {count != null && <span className="ml-2 text-[13px] font-normal text-[#888]">({count})</span>}
+        </span>
+      </button>
+      {expandable ? (
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-expanded={open}
+          aria-label={open ? "Collapse" : "Expand"}
+          className="ml-2 flex h-6 w-6 shrink-0 items-center justify-center"
+        >
+          <FiChevronUp
+            size={18}
+            className={`text-[#d9a641] transition-transform duration-300 ${open ? "" : "rotate-180"}`}
+          />
+        </button>
+      ) : (
+        <span className="ml-2 w-6 shrink-0" />
+      )}
+    </div>
+  );
+}
+
+// Category > sub category > child category; a level expands once its parent is selected
+function CategoryTree({ categories, selected, onSelect }) {
+  const { category, subCategory, childCategory } = selected;
+  // Manual arrow toggles win over the default (open while selected)
+  const [manual, setManual] = useState({});
+  // Any change of selection (sidebar, menu or back button) re-opens the selected path
+  const selKey = `${category}|${subCategory}|${childCategory}`;
+  const [prevSelKey, setPrevSelKey] = useState(selKey);
+  if (prevSelKey !== selKey) {
+    setPrevSelKey(selKey);
+    setManual({});
+  }
+  const isOpen = (key, selectedNow) => manual[key] ?? selectedNow;
+  const toggle = (key, selectedNow) => setManual((m) => ({ ...m, [key]: !isOpen(key, selectedNow) }));
+  const pick = (...args) => {
+    setManual({});
+    onSelect(...args);
+  };
+  return (
+    <div className="shop-scroll max-h-[390px] overflow-y-auto">
+      {categories.map((cat) => {
+        const catKey = `c:${cat.slug}`;
+        const catOpen = isOpen(catKey, category === cat.slug);
+        return (
+          <div key={cat.id}>
+            <CategoryButton
+              depth={0}
+              count={cat.products_count}
+              active={category === cat.slug && !subCategory}
+              expandable={(cat.sub_categories || []).length > 0}
+              open={catOpen}
+              onToggle={() => toggle(catKey, category === cat.slug)}
+              onClick={() => pick(cat.slug)}
+            >
+              {cat.name}
+            </CategoryButton>
+            {catOpen &&
+              (cat.sub_categories || []).map((sub) => {
+                const subKey = `s:${sub.slug}`;
+                const subOpen = isOpen(subKey, subCategory === sub.slug);
+                return (
+                  <div key={sub.id}>
+                    <CategoryButton
+                      depth={1}
+                      count={sub.products_count}
+                      active={subCategory === sub.slug && !childCategory}
+                      expandable={(sub.child_categories || []).length > 0}
+                      open={subOpen}
+                      onToggle={() => toggle(subKey, subCategory === sub.slug)}
+                      onClick={() => pick(cat.slug, sub.slug)}
+                    >
+                      {sub.name}
+                    </CategoryButton>
+                    {subOpen &&
+                      (sub.child_categories || []).map((child) => (
+                        <CategoryButton
+                          key={child.id}
+                          depth={2}
+                          count={child.products_count}
+                          active={childCategory === child.slug}
+                          onClick={() => pick(cat.slug, sub.slug, child.slug)}
+                        >
+                          {child.name}
+                        </CategoryButton>
+                      ))}
+                  </div>
+                );
+              })}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function FilterSidebar({
+  brands,
+  priceBounds,
+  priceRange,
+  onPriceChange,
+  selectedBrands,
+  onToggleBrand,
+  onClear,
+  categories = [],
+  selectedCategory = {},
+  onSelectCategory,
+}) {
   return (
     <aside className="w-full lg:w-[255px] lg:shrink-0">
       <div className="flex items-center justify-between border-b border-gray-200 pl-3 pr-2">
@@ -52,8 +176,16 @@ function FilterSidebar({ brands, priceBounds, priceRange, onPriceChange, selecte
         </button>
       </div>
 
-      {priceBounds && priceBounds[1] > priceBounds[0] && (
+      {categories.length > 0 && (
         <div className="mt-5">
+          <Collapsible title="Categories">
+            <CategoryTree categories={categories} selected={selectedCategory} onSelect={onSelectCategory} />
+          </Collapsible>
+        </div>
+      )}
+
+      {priceBounds && priceBounds[1] > priceBounds[0] && (
+        <div className="mt-7">
           <Collapsible title="Price">
             <div className="px-2 pb-6 pt-9">
               <PriceRange bounds={priceBounds} value={priceRange} onChange={onPriceChange} />

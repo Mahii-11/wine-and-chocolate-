@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { useParams, useSearchParams } from "react-router";
+import { useNavigate, useParams, useSearchParams } from "react-router";
 import ShopPageHeader from "../components/shop/ShopPageHeader.jsx";
 import FilterSidebar from "../components/shop/FilterSidebar.jsx";
 import ShopProductCard from "../components/shop/ShopProductCard.jsx";
 import ShopSeoContent from "../components/shop/ShopSeoContent.jsx";
-import { getAllBrands, getShopProducts } from "../services/api";
+import { getAllBrands, getMenuData, getShopProducts } from "../services/api";
 import {
   sortOptions,
   pageSizeOptions,
@@ -33,20 +33,50 @@ function Shop() {
   // /shop/products is the "all products" listing, not a category
   const slug = routeSlug === "products" ? undefined : routeSlug;
   const [searchParams] = useSearchParams();
-  const brandParam = searchParams.get("brand");
-  const page =
-    shopPages[slug] ??
-    (slug
-      ? { title: titleFromSlug(slug), breadcrumb: [{ label: titleFromSlug(slug) }], intro: [] }
-      : defaultShopPage);
-
+  const navigate = useNavigate();
+  // Category / sub category / child category / brand are all filtered by slug (kept in the URL)
+  const category = searchParams.get("category") || slug || "";
+  const subCategory = searchParams.get("sub_category") || "";
+  const childCategory = searchParams.get("child_category") || "";
+  const brandParam = searchParams.get("brand") || "";
   const [brands, setBrands] = useState([]);
-  const [brandsLoaded, setBrandsLoaded] = useState(false);
-  const [selectedBrands, setSelectedBrands] = useState([]);
+  const [categoryTree, setCategoryTree] = useState([]);
+
+  // Title + breadcrumb follow the selected category > sub category > child category chain
+  const catNode = categoryTree.find((c) => c.slug === category);
+  const subNode = catNode?.sub_categories?.find((s) => s.slug === subCategory);
+  const childNode = subNode?.child_categories?.find((c) => c.slug === childCategory);
+  const chain = [
+    category && { label: catNode?.name ?? titleFromSlug(category), to: `/shop?category=${category}` },
+    subCategory && {
+      label: subNode?.name ?? titleFromSlug(subCategory),
+      to: `/shop?category=${category}&sub_category=${subCategory}`,
+    },
+    childCategory && { label: childNode?.name ?? titleFromSlug(childCategory) },
+  ].filter(Boolean);
+  const page =
+    (!searchParams.size && shopPages[slug]) ||
+    (chain.length
+      ? {
+          title: chain[chain.length - 1].label,
+          breadcrumb: [{ label: "Shop", to: "/shop" }, ...chain],
+          intro: [],
+        }
+      : defaultShopPage);
+  const selectedBrands = useMemo(() => (brandParam ? [brandParam] : []), [brandParam]);
 
   const [priceBounds, setPriceBounds] = useState(null);
   const [priceRange, setPriceRange] = useState(null); // slider value while dragging
   const [appliedPrice, setAppliedPrice] = useState(null); // debounced value sent to the API
+
+  // A different category/brand has its own price range: drop the old slider selection
+  const filterKey = [category, subCategory, childCategory, brandParam].join("|");
+  const [prevFilterKey, setPrevFilterKey] = useState(filterKey);
+  if (prevFilterKey !== filterKey) {
+    setPrevFilterKey(filterKey);
+    setPriceRange(null);
+    setAppliedPrice(null);
+  }
 
   const [sort, setSort] = useState("default");
   const [pageSize, setPageSize] = useState(pageSizeOptions[0]);
@@ -62,19 +92,53 @@ function Shop() {
         setBrands(
           [...list]
             .sort((a, b) => a.name.localeCompare(b.name))
-            .map((b) => ({ id: String(b.id), name: b.name, slug: b.slug, logo: b.image })),
+            .map((b) => ({ id: b.slug, name: b.name, slug: b.slug, logo: b.image })),
         ),
       )
-      .catch(() => {})
-      .finally(() => setBrandsLoaded(true));
+      .catch(() => {});
+    // Full tree (every category, sub and child) comes from menu-data. `shop/products` filters only list
+    // categories that have products, so it is used just for the product counts.
+    Promise.all([getMenuData(), getShopProducts({ perPage: 1 }).catch(() => ({ categories: [] }))])
+      .then(([menu, shop]) => {
+        const counts = {};
+        const walk = (list, ...path) =>
+          list.forEach((c) => {
+            counts[[...path, c.slug].join("/")] = c.products_count;
+            walk(c.sub_categories || c.child_categories || [], ...path, c.slug);
+          });
+        walk(shop.categories);
+        setCategoryTree(
+          menu.map((cat) => ({
+            ...cat,
+            products_count: counts[cat.slug] ?? 0,
+            sub_categories: (cat.sub_categories || []).map((sub) => ({
+              ...sub,
+              products_count: counts[`${cat.slug}/${sub.slug}`] ?? 0,
+              child_categories: (sub.child_categories || []).map((c) => ({
+                ...c,
+                products_count: counts[`${cat.slug}/${sub.slug}/${c.slug}`] ?? 0,
+              })),
+            })),
+          })),
+        );
+      })
+      .catch(() => {});
   }, []);
 
-  // ?brand= may hold a brand slug or id (menu / SEO links): resolve it once brands are known
-  useEffect(() => {
-    if (!brandsLoaded) return;
-    const match = brandParam && brands.find((b) => b.slug === brandParam || b.id === brandParam);
-    setSelectedBrands(match ? [match.id] : []);
-  }, [brandsLoaded, brandParam, brands]);
+  // Rewrite the URL with the given filter slugs (empty values are dropped)
+  const applyFilters = (next) => {
+    const q = new URLSearchParams();
+    const all = {
+      category,
+      sub_category: subCategory,
+      child_category: childCategory,
+      brand: brandParam,
+      ...next,
+    };
+    Object.entries(all).forEach(([k, v]) => v && q.set(k, v));
+    const search = q.toString();
+    navigate({ pathname: "/shop", search: search ? `?${search}` : "" });
+  };
 
   // Debounce the price slider so dragging doesn't fire a request per step
   useEffect(() => {
@@ -83,15 +147,15 @@ function Shop() {
     return () => clearTimeout(t);
   }, [priceRange]);
 
-  const brandKey = selectedBrands.join(",");
   const [min, max] = appliedPrice ?? [];
 
   useEffect(() => {
-    if (!brandsLoaded) return;
     const ctrl = new AbortController();
     setLoading(true);
     getShopProducts({
-      category: slug,
+      category,
+      subCategory,
+      childCategory,
       brands: selectedBrands,
       minPrice: min,
       maxPrice: max,
@@ -112,7 +176,7 @@ function Shop() {
       });
     return () => ctrl.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [brandsLoaded, slug, brandKey, min, max, pageSize]);
+  }, [category, subCategory, childCategory, brandParam, min, max, pageSize]);
 
   const total = meta.total ?? products.length;
   const hasMore = (meta.current_page ?? 1) < (meta.last_page ?? 1);
@@ -121,7 +185,9 @@ function Shop() {
   const loadMore = () => {
     setLoadingMore(true);
     getShopProducts({
-      category: slug,
+      category,
+      subCategory,
+      childCategory,
       brands: selectedBrands,
       minPrice: min,
       maxPrice: max,
@@ -137,10 +203,13 @@ function Shop() {
   };
 
   // The API accepts a single brand id, so brands behave like a single-select
-  const toggleBrand = (id) => setSelectedBrands((prev) => (prev.includes(id) ? [] : [id]));
+  const toggleBrand = (id) => applyFilters({ brand: brandParam === id ? "" : id });
+
+  const selectCategory = (cat, sub = "", child = "") =>
+    applyFilters({ category: cat, sub_category: sub, child_category: child });
 
   const clearFilters = () => {
-    setSelectedBrands([]);
+    if (searchParams.size || slug) navigate("/shop");
     setPriceRange(null);
     setAppliedPrice(null);
     setSort("default");
@@ -160,6 +229,9 @@ function Shop() {
             selectedBrands={selectedBrands}
             onToggleBrand={toggleBrand}
             onClear={clearFilters}
+            categories={categoryTree}
+            selectedCategory={{ category, subCategory, childCategory }}
+            onSelectCategory={selectCategory}
           />
 
           <div className="min-w-0 flex-1">

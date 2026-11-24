@@ -70,7 +70,13 @@ function MegaMenu({ menu, offset = 34, onNavigate }) {
                   className={`px-9 pb-8 pt-7 ${i > 0 ? "border-l border-[#efefef]" : ""} ${col.span ? "flex-[2]" : "flex-1"}`}
                 >
                   <h3 className="inline-block border-b-2 border-[#d9a641] pb-1 font-serif text-[16px] font-bold uppercase tracking-[0.02em] text-[#222]">
-                    {col.title}
+                    {col.to ? (
+                      <Link to={col.to} onClick={onNavigate} className="transition hover:text-brand-gold">
+                        {col.title}
+                      </Link>
+                    ) : (
+                      col.title
+                    )}
                   </h3>
                   <ul
                     className="mt-6 grid gap-x-8 gap-y-[11px]"

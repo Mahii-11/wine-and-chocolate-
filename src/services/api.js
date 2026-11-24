@@ -90,11 +90,23 @@ export const getBestSellers = async () => {
   return (list || []).map(toCardProduct);
 };
 
-// GET shop/products?category=<slug>&brand=<id,id>&min_price=&max_price=&page=&per_page=
+// GET shop/products?category=<slug>&sub_category=<slug>&child_category=<slug>&brand=<slug>&min_price=&max_price=&page=&per_page=
 // -> { status, data: [product], filters: { price: { min, max }, ... }, meta: { total, per_page, current_page, last_page } }
-export const getShopProducts = async ({ category, brands = [], minPrice, maxPrice, page = 1, perPage, signal } = {}) => {
+export const getShopProducts = async ({
+  category,
+  subCategory,
+  childCategory,
+  brands = [],
+  minPrice,
+  maxPrice,
+  page = 1,
+  perPage,
+  signal,
+} = {}) => {
   const params = new URLSearchParams();
   if (category) params.set("category", category);
+  if (subCategory) params.set("sub_category", subCategory);
+  if (childCategory) params.set("child_category", childCategory);
   if (brands.length) params.set("brand", brands.join(","));
   if (minPrice != null) params.set("min_price", minPrice);
   if (maxPrice != null) params.set("max_price", maxPrice);
@@ -116,6 +128,7 @@ export const getShopProducts = async ({ category, brands = [], minPrice, maxPric
   return {
     products: (res.data || []).map(toCardProduct),
     priceBounds: price ? [Math.floor(Number(price.min) || 0), Math.ceil(Number(price.max) || 0)] : null,
+    categories: res.filters?.categories || [],
     meta: res.meta || {},
   };
 };
@@ -191,6 +204,16 @@ const getCollection = async (endpoint) => {
       image: c.image || "",
       to: `/shop/${c.slug}`,
     }));
+};
+
+// GET menu-data -> { status, data: [ { id, name, slug, sub_categories: [ { id, name, slug,
+//                     child_categories: [ { id, name, slug } ] } ] } ] }
+export const getMenuData = async () => {
+  const res = await fetchData("menu-data");
+  if (!(res.status ?? res.success)) {
+    throw new Error("Menu fetch unsuccessful");
+  }
+  return Array.isArray(res?.data) ? res.data : [];
 };
 
 // GET gift-collections-data
